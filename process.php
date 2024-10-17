@@ -60,7 +60,7 @@ if ($sessionmode === 'subscription') {
         $stripehelper->deliver_course($component, $paymentarea, $itemid, $USER->id);
 
         // Find redirection.
-        $url = helper::get_success_url($component, $paymentarea, $itemid);
+        $url = helper::get_success_url($component, $paymentarea, $itemid); $SESSION->basketid = NULL;
         redirect($url, get_string('paymentsuccessful', 'paygw_stripe'), 0, 'success');
     } else if ($stripehelper->is_pending($sessionid)) {
         redirect(new moodle_url('/'), get_string('paymentpending', 'paygw_stripe'));
