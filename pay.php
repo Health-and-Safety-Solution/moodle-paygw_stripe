@@ -42,6 +42,17 @@ $surcharge = helper::get_gateway_surcharge('stripe');
 
 $cost = helper::get_rounded_cost($payable->get_amount(), $payable->get_currency(), $surcharge);
 
+if($cost == 0) {
+    $paymentid = helper::save_payment($payable->get_account_id(), $component, $paymentarea,
+        $itemid, $USER->id, $cost, $payable->get_currency(), 'stripe');
+    helper::deliver_order($component, $paymentarea, $itemid, $paymentid, $USER->id);
+
+    // Find redirection.
+    $url = helper::get_success_url($component, $paymentarea, $itemid);
+    $SESSION->basketid = NULL;
+    redirect($CFG->wwwroot . '/blocks/iomad_commerce/edit_order_form.php?id='.$itemid, 'Order Confirmed.');
+}
+
 $stripehelper = new stripe_helper($config->apikey, $config->secretkey);
 if (!isset($config->type) || $config->type == 'onetime') {
     $sessionid = $stripehelper->generate_payment($config, $payable, $description, $cost, $component,
