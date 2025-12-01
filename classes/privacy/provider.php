@@ -32,8 +32,7 @@ use core_privacy\local\metadata\collection;
  * @copyright  2021 Alex Morris <alex@navra.nz>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class provider implements \core_privacy\local\metadata\provider, \core_privacy\local\request\data_provider {
-
+class provider implements \core_privacy\local\request\data_provider, \core_privacy\local\metadata\provider {
     /**
      * Returns metadata about this plugin.
      *
@@ -51,17 +50,17 @@ class provider implements \core_privacy\local\metadata\provider, \core_privacy\l
         );
 
         $collection->add_database_table(
-            'paygw_stripe_intents',
+            'paygw_stripe_checkout_sessions',
             [
-                'userid' => 'privacy:metadata:stripe_intents:userid',
+                'userid' => 'privacy:metadata:stripe_checkout_sessions:userid',
             ],
-            'privacy:metadata:stripe_intents'
+            'privacy:metadata:stripe_checkout_sessions'
         );
 
         $collection->add_database_table(
             'paygw_stripe_subscriptions',
             [
-                'userid' => 'privacy:metadata:stripe_subscriptions:userid'
+                'userid' => 'privacy:metadata:stripe_subscriptions:userid',
             ],
             'privacy:metadata:stripe_subscriptions'
         );

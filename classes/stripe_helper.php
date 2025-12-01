@@ -52,7 +52,6 @@ require_once(__DIR__ . '/../.extlib/stripe-php/init.php');
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class stripe_helper {
-
     /**
      * @var StripeClient Secret API key (Do not publish).
      */
@@ -65,7 +64,7 @@ class stripe_helper {
     /**
      * @var string Stripe API version set explicitly in Stripe client.
      */
-    public static $apiversion = '2023-08-16';
+    public static $apiversion = '2025-06-30.basil';
 
     /**
      * Initialise the Stripe API client.
@@ -98,15 +97,21 @@ class stripe_helper {
     public function get_product(string $component, string $paymentarea, string $itemid): ?Product {
         global $DB;
 
-        if ($record = $DB->get_record('paygw_stripe_products',
-            ['component' => $component, 'paymentarea' => $paymentarea, 'itemid' => $itemid])) {
+        if (
+            $record = $DB->get_record(
+                'paygw_stripe_products',
+                ['component' => $component, 'paymentarea' => $paymentarea, 'itemid' => $itemid]
+            )
+        ) {
             try {
                 return $this->stripe->products->retrieve($record->productid);
             } catch (ApiErrorException $e) {
                 // Product exists in Moodle but not in stripe, possibly the keys were switched.
                 // Delete product for creation later.
-                $DB->delete_records('paygw_stripe_products',
-                    ['component' => $component, 'paymentarea' => $paymentarea, 'itemid' => $itemid]);
+                $DB->delete_records(
+                    'paygw_stripe_products',
+                    ['component' => $component, 'paymentarea' => $paymentarea, 'itemid' => $itemid]
+                );
                 return null;
             }
         }
@@ -127,7 +132,7 @@ class stripe_helper {
     public function create_product(string $description, string $component, string $paymentarea, string $itemid): Product {
         global $DB;
         $product = $this->stripe->products->create([
-            'name' => $description
+            'name' => $description,
         ]);
         $record = new \stdClass();
         $record->productid = $product->id;
@@ -177,8 +182,14 @@ class stripe_helper {
      * @return Price
      * @throws ApiErrorException
      */
-    public function create_price(string $currency, string $productid, float $unitamount, bool $automatictax,
-        ?string $defaultbehavior, array $recurring = null) {
+    public function create_price(
+        string $currency,
+        string $productid,
+        float $unitamount,
+        bool $automatictax,
+        ?string $defaultbehavior = null,
+        ?array $recurring = null
+    ) {
         $pricedata = [
             'currency' => $currency,
             'product' => $productid,
@@ -253,8 +264,16 @@ class stripe_helper {
      * @throws ApiErrorException
      * @throws \dml_exception
      */
-    private function create_product_and_price(object $config, payable $payable, string $description, float $cost, string $component,
-        string $paymentarea, string $itemid, array $subscription = null) {
+    private function create_product_and_price(
+        object $config,
+        payable $payable,
+        string $description,
+        float $cost,
+        string $component,
+        string $paymentarea,
+        string $itemid,
+        ?array $subscription = null
+    ) {
         $unitamount = $this->get_unit_amount($cost, $payable->get_currency());
         $currency = strtolower($payable->get_currency());
 
@@ -262,20 +281,34 @@ class stripe_helper {
             $product = $this->create_product($description, $component, $paymentarea, $itemid);
         }
         if (!$price = $this->get_price($product, is_array($subscription))) {
-            $price = $this->create_price($currency, $product->id, $unitamount, $config->enableautomatictax == 1,
-                $config->defaulttaxbehavior, $subscription);
+            $price = $this->create_price(
+                $currency,
+                $product->id,
+                $unitamount,
+                $config->enableautomatictax == 1,
+                $config->defaulttaxbehavior,
+                $subscription
+            );
         } else {
             // Check if the price details mismatch in any way.
-            if ($price->unit_amount != $unitamount || $price->currency != $currency ||
+            if (
+                $price->unit_amount != $unitamount || $price->currency != $currency ||
                 (is_array($subscription) && $price->type != 'recurring') ||
                 (is_array($subscription) && $price->type == 'recurring' &&
                     ($price->recurring->toArray()['interval'] != $subscription['interval'] ||
                         $price->recurring->toArray()['interval_count'] != $subscription['interval_count'])) ||
-                ($price->type == 'recurring' && !is_array($subscription))) {
+                ($price->type == 'recurring' && !is_array($subscription))
+            ) {
                 // We cannot update the price or currency, so we must create a new price.
                 $this->stripe->prices->update($price->id, ['active' => false]);
-                $price = $this->create_price($currency, $product->id, $unitamount, $config->enableautomatictax == 1,
-                    $config->defaulttaxbehavior, $subscription);
+                $price = $this->create_price(
+                    $currency,
+                    $product->id,
+                    $unitamount,
+                    $config->enableautomatictax == 1,
+                    $config->defaulttaxbehavior,
+                    $subscription
+                );
             }
             // Set tax behavior if not set already.
             if ($config->enableautomatictax == 1 && (!isset($price->tax_behavior) || $price->tax_behavior === 'unspecified')) {
@@ -304,15 +337,29 @@ class stripe_helper {
      * @return string
      * @throws ApiErrorException
      */
-    public function generate_payment(object $config, payable $payable, string $description, float $cost, string $component,
-        string $paymentarea, string $itemid): string {
+    public function generate_payment(
+        object $config,
+        payable $payable,
+        string $description,
+        float $cost,
+        string $component,
+        string $paymentarea,
+        string $itemid
+    ): string {
         global $CFG, $USER;
 
         // Ensure webhook exists before we potentially use it.
         $this->create_webhook($payable->get_account_id());
 
-        list($product, $price) = $this->create_product_and_price($config, $payable, $description, $cost, $component,
-            $paymentarea, $itemid);
+        [$product, $price] = $this->create_product_and_price(
+            $config,
+            $payable,
+            $description,
+            $cost,
+            $component,
+            $paymentarea,
+            $itemid
+        );
 
         if (!$customer = $this->get_customer($USER->id)) {
             $customer = $this->create_customer($USER);
@@ -326,16 +373,26 @@ class stripe_helper {
             'payment_method_types' => $config->paymentmethods,
             'payment_method_options' => [
                 'wechat_pay' => [
-                    'client' => "web"
+                    'client' => "web",
                 ],
             ],
             'mode' => 'payment',
             'line_items' => [[
                 'price' => $price,
-                'quantity' => 1
+                'quantity' => 1,
             ]],
             'automatic_tax' => [
                 'enabled' => $config->enableautomatictax == 1,
+            ],
+            'billing_address_collection' => ($config->collectbillingaddress ?? 0) == 1 ? 'required' : 'auto',
+            'invoice_creation' => [
+                'enabled' => ($config->invoicecreation ?? 0) == 1,
+                'invoice_data' => [
+                    'issuer' => [
+                        'type' => 'self',
+                    ],
+                    'description' => $description,
+                ],
             ],
             'customer' => $customer->id,
             'metadata' => [
@@ -383,24 +440,48 @@ class stripe_helper {
      * @throws \dml_exception
      * @throws \moodle_exception
      */
-    public function generate_subscription(object $config, payable $payable, string $description, float $cost, string $component,
-        string $paymentarea, string $itemid): ?string {
-        global $CFG, $USER, $DB;
+    public function generate_subscription(
+        object $config,
+        payable $payable,
+        string $description,
+        float $cost,
+        string $component,
+        string $paymentarea,
+        string $itemid
+    ): ?string {
+        global $CFG, $USER;
 
         // Ensure webhook exists before we use it.
         $this->create_webhook($payable->get_account_id());
 
         $pricedetails = $this->get_subscription_config_price_details($config);
 
-        list($product, $price) = $this->create_product_and_price($config, $payable, $description, $cost, $component,
-            $paymentarea, $itemid, $pricedetails);
+        [$product, $price] = $this->create_product_and_price(
+            $config,
+            $payable,
+            $description,
+            $cost,
+            $component,
+            $paymentarea,
+            $itemid,
+            $pricedetails
+        );
 
         if (!$customer = $this->get_customer($USER->id)) {
             $customer = $this->create_customer($USER);
         }
 
-        // If anchored billing and/or trial period are enabled, set up the subscriptiondata parameter.
-        $subscriptiondata = [];
+        $subscriptiondata = [
+            'metadata' => [
+                'userid' => $USER->id,
+                'username' => $USER->username,
+                'firstname' => $USER->firstname,
+                'lastname' => $USER->lastname,
+                'component' => $component,
+                'paymentarea' => $paymentarea,
+                'itemid' => $itemid,
+            ],
+        ];
         if ($config->anchorbilling) {
             $subscriptiondata['billing_cycle_anchor'] = $this->get_anchor_billing_dates($config)->getTimestamp();
             if ($config->firstintervalfree) {
@@ -426,6 +507,7 @@ class stripe_helper {
             'automatic_tax' => [
                 'enabled' => $config->enableautomatictax == 1,
             ],
+            'billing_address_collection' => ($config->collectbillingaddress ?? 0) == 1 ? 'required' : 'auto',
             'allow_promotion_codes' => $config->allowpromotioncodes == 1,
             'subscription_data' => $subscriptiondata,
             'customer' => $customer->id,
@@ -558,33 +640,50 @@ class stripe_helper {
     }
 
     /**
-     * Save payment intent status with customer and product details.
+     * Save checkout session status with customer and product details.
      *
      * @param Session $session
      * @return void
      * @throws \dml_exception
      */
-    private function save_payment_intent(Session $session) {
+    private function save_checkout_session(Session $session) {
         global $DB, $USER;
 
-        $intent = $DB->get_record('paygw_stripe_intents', ['paymentintent' => $session->payment_intent]);
-        if ($intent != null) {
-            $intent->status = $session->status;
-            $intent->paymentstatus = $session->payment_status;
-            $DB->update_record('paygw_stripe_intents', $intent);
+        $storedsession = $DB->get_record('paygw_stripe_checkout_sessions', ['checkoutsessionid' => $session->id]);
+        if ($storedsession != null) {
+            $storedsession->status = $session->status;
+            $storedsession->paymentstatus = $session->payment_status;
+            $DB->update_record('paygw_stripe_checkout_sessions', $storedsession);
             return;
         }
 
-        $intent = new \stdClass();
-        $intent->userid = $USER->id;
-        $intent->paymentintent = $session->payment_intent;
-        $intent->customerid = $session->customer->id;
-        $intent->amounttotal = $session->amount_total;
-        $intent->paymentstatus = $session->payment_status;
-        $intent->status = $session->status;
-        $intent->productid = $session->line_items->first()->price->product;
+        $checkoutsession = new \stdClass();
+        $checkoutsession->checkoutsessionid = $session->id;
+        $checkoutsession->userid = $USER->id;
+        $checkoutsession->paymentintent = $session->payment_intent;
+        $checkoutsession->customerid = $session->customer->id;
+        $checkoutsession->amounttotal = $session->amount_total;
+        $checkoutsession->paymentstatus = $session->payment_status;
+        $checkoutsession->status = $session->status;
+        $checkoutsession->productid = $session->line_items->first()->price->product;
 
-        $DB->insert_record('paygw_stripe_intents', $intent);
+        $DB->insert_record('paygw_stripe_checkout_sessions', $checkoutsession);
+    }
+
+    /**
+     * Check if a checkout session has been saved in the DB.
+     *
+     * @param string $sessionid
+     * @return bool
+     * @throws \dml_exception
+     */
+    public function is_checkout_session_saved(string $sessionid): bool {
+        global $DB;
+
+        if ($DB->get_record('paygw_stripe_checkout_sessions', ['checkoutsessionid' => $sessionid])) {
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -600,7 +699,7 @@ class stripe_helper {
         if ($session->mode == 'subscription') {
             $this->save_subscription($session);
         } else {
-            $this->save_payment_intent($session);
+            $this->save_checkout_session($session);
         }
     }
 
@@ -616,8 +715,16 @@ class stripe_helper {
     public function deliver_course(string $component, string $paymentarea, int $itemid, int $userid) {
         $payable = helper::get_payable($component, $paymentarea, $itemid);
         $cost = helper::get_rounded_cost($payable->get_amount(), $payable->get_currency(), helper::get_gateway_surcharge('stripe'));
-        $paymentid = helper::save_payment($payable->get_account_id(), $component, $paymentarea,
-            $itemid, $userid, $cost, $payable->get_currency(), 'stripe');
+        $paymentid = helper::save_payment(
+            $payable->get_account_id(),
+            $component,
+            $paymentarea,
+            $itemid,
+            $userid,
+            $cost,
+            $payable->get_currency(),
+            'stripe'
+        );
         helper::deliver_order($component, $paymentarea, $itemid, $paymentid, $userid);
     }
 
@@ -682,6 +789,28 @@ class stripe_helper {
     }
 
     /**
+     * Delete a webhook record in the database and it's associated Stripe endpoint.
+     *
+     * @param int $paymentaccountid
+     * @return bool
+     * @throws ApiErrorException
+     * @throws \dml_exception
+     */
+    public function delete_webhook(int $paymentaccountid): bool {
+        global $DB;
+
+        if (!($record = $DB->get_record('paygw_stripe_webhooks', ['paymentaccountid' => $paymentaccountid]))) {
+            return false;
+        }
+
+        $DB->delete_records('paygw_stripe_webhooks', ['paymentaccountid' => $record->paymentaccountid]);
+
+        $this->stripe->webhookEndpoints->delete($record->webhookid);
+
+        return true;
+    }
+
+    /**
      * Process stripe payment events
      *
      * @param Event $event
@@ -701,28 +830,33 @@ class stripe_helper {
             // Deliver the course if payment was successful or notify the user the payment failed.
             case 'checkout.session.async_payment_succeeded':
                 // Events are sent to all subscribed webhooks, verify we are the correct receipt for this event.
-                $session = $this->stripe->checkout->sessions->retrieve($event->data->object->id, ['expand' => ['payment_intent']]);
-                if (!($intentrecord = $DB->get_record('paygw_stripe_intents', ['paymentintent' => $session->payment_intent->id]))) {
+                $session = $this->stripe->checkout->sessions->retrieve($event->data->object->id);
+                if (!($sessionrecord = $DB->get_record('paygw_stripe_checkout_sessions', ['checkoutsessionid' => $session->id]))) {
                     return false;
                 }
                 $this->save_payment_status($session->id); // Update saved intent status.
 
                 // Deliver course.
-                $this->deliver_course($metadata['component'], $metadata['paymentarea'], $metadata['itemid'], $intentrecord->userid);
+                $this->deliver_course(
+                    $metadata['component'],
+                    $metadata['paymentarea'],
+                    $metadata['itemid'],
+                    $sessionrecord->userid
+                );
 
                 // Notify user payment was successful.
                 $url = helper::get_success_url($metadata['component'], $metadata['paymentarea'], $metadata['itemid']);
-                $this->notify_user($intentrecord->userid, 'successful', ['url' => $url->out()]);
+                $this->notify_user($sessionrecord->userid, 'successful', ['url' => $url->out()]);
                 break;
             case 'checkout.session.async_payment_failed':
                 // Events are sent to all subscribed webhooks, verify we are the correct receipt for this event.
-                $session = $this->stripe->checkout->sessions->retrieve($event->data->object->id, ['expand' => ['payment_intent']]);
-                if (!($intentrecord = $DB->get_record('paygw_stripe_intents', ['paymentintent' => $session->payment_intent->id]))) {
+                $session = $this->stripe->checkout->sessions->retrieve($event->data->object->id);
+                if (!($sessionrecord = $DB->get_record('paygw_stripe_intents', ['checkoutsessionid' => $session->id]))) {
                     return false;
                 }
                 $this->save_payment_status($session->id); // Update saved intent status.
                 // Notify user payment failed.
-                $this->notify_user($intentrecord->userid, 'failed');
+                $this->notify_user($sessionrecord->userid, 'failed');
                 break;
             // Handle customer subscriptions being deleted.
             case 'customer.subscription.deleted':
@@ -791,14 +925,16 @@ class stripe_helper {
             $cancellink =
                 new moodle_url('/payment/gateway/stripe/cancel.php', ['subscriptionid' => $moodlesub->id]);
             $portallink =
-                new moodle_url('/payment/gateway/stripe/subscriptions.php',
-                    ['action' => 'portal', 'subscriptionid' => $moodlesub->id]);
+                new moodle_url(
+                    '/payment/gateway/stripe/subscriptions.php',
+                    ['action' => 'portal', 'subscriptionid' => $moodlesub->id]
+                );
 
             return [
                 $product->name,
                 $this->get_localised_cost($price->unit_amount, $price->currency) . ' / ' .
                 get_string('customsubscriptioninterval:' . $price->recurring->interval, 'paygw_stripe'),
-                userdate($subscription->current_period_end),
+                userdate($subscription->items->data[0]->current_period_end),
                 get_string('subscriptionstatus:' . $moodlesub->status, 'paygw_stripe'),
                 $moodlesub->status != 'canceled' ?
                     \html_writer::link($portallink, get_string('updatepaymentmethod', 'paygw_stripe')) : '',
@@ -860,8 +996,8 @@ class stripe_helper {
                 'after_completion' => [
                     'type' => 'redirect',
                     'redirect' => [
-                        'return_url' => $returnurl->out()
-                    ]
+                        'return_url' => $returnurl->out(),
+                    ],
                 ],
             ],
             'return_url' => $returnurl->out(),
@@ -918,7 +1054,7 @@ class stripe_helper {
             default:
                 return [
                     'interval' => 'month',
-                    'interval_count' => 1
+                    'interval_count' => 1,
                 ];
         }
     }
@@ -940,23 +1076,31 @@ class stripe_helper {
             'daily' => new DateTime('next day 00:00:00', new DateTimeZone('UTC')),
             'weekly' => new DateTime('this ' . $firstdayofweek . ' 00:00:00', new DateTimeZone('UTC')),
             'monthly' => new DateTime('first day of next month 00:00:00', new DateTimeZone('UTC')),
-            'every3months' => (new DateTime('first day of this month 00:00:00',
-                    new DateTimeZone('UTC')))->add(DateInterval::createFromDateString('3 months')),
-            'every6months' => (new DateTime('first day of this month 00:00:00',
-                    new DateTimeZone('UTC')))->add(DateInterval::createFromDateString('6 months')),
+            'every3months' => (new DateTime(
+                'first day of this month 00:00:00',
+                new DateTimeZone('UTC')
+            ))->add(DateInterval::createFromDateString('3 months')),
+            'every6months' => (new DateTime(
+                'first day of this month 00:00:00',
+                new DateTimeZone('UTC')
+            ))->add(DateInterval::createFromDateString('6 months')),
             'yearly' => new DateTime('first day of this year 00:00:00', new DateTimeZone('UTC')),
         ];
         if ($config->subscriptioninterval !== 'custom') {
             return $dates[$config->subscriptioninterval];
         }
         if ($config->customsubscriptioninterval === 'day') {
-            return (new DateTime('this day 00:00:00',
-                    new DateTimeZone('UTC')))->add(DateInterval::createFromDateString($config->customsubscriptionintervalcount .
-                    ' days'));
+            return (new DateTime(
+                'this day 00:00:00',
+                new DateTimeZone('UTC')
+            ))->add(DateInterval::createFromDateString($config->customsubscriptionintervalcount .
+                ' days'));
         } else {
-            return (new DateTime('first day of this ' . $config->customsubscriptioninterval . ' 00:00:00',
-                    new DateTimeZone('UTC')))->add(DateInterval::createFromDateString($config->customsubscriptionintervalcount .
-                    ' ' . $config->customsubscriptioninterval . 's'));
+            return (new DateTime(
+                'first day of this ' . $config->customsubscriptioninterval . ' 00:00:00',
+                new DateTimeZone('UTC')
+            ))->add(DateInterval::createFromDateString($config->customsubscriptionintervalcount .
+                ' ' . $config->customsubscriptioninterval . 's'));
         }
     }
 
@@ -972,17 +1116,23 @@ class stripe_helper {
             'daily' => new DateTime('next day 00:00:00', new DateTimeZone('UTC')),
             'weekly' => new DateTime('this day next week 00:00:00', new DateTimeZone('UTC')),
             'monthly' => new DateTime('this day next month 00:00:00', new DateTimeZone('UTC')),
-            'every3months' => (new DateTime('this day next month 00:00:00',
-                    new DateTimeZone('UTC')))->add(DateInterval::createFromDateString('3 months')),
-            'every6months' => (new DateTime('this day next month 00:00:00',
-                    new DateTimeZone('UTC')))->add(DateInterval::createFromDateString('6 months')),
-            'yearly' => new DateTime('this day next year 00:00:00', new DateTimeZone('UTC'))
+            'every3months' => (new DateTime(
+                'this day next month 00:00:00',
+                new DateTimeZone('UTC')
+            ))->add(DateInterval::createFromDateString('3 months')),
+            'every6months' => (new DateTime(
+                'this day next month 00:00:00',
+                new DateTimeZone('UTC')
+            ))->add(DateInterval::createFromDateString('6 months')),
+            'yearly' => new DateTime('this day next year 00:00:00', new DateTimeZone('UTC')),
         ];
         if ($config->subscriptioninterval !== 'custom') {
             return $dates[$config->subscriptioninterval];
         }
-        return (new DateTime('today 00:00:00',
-            new DateTimeZone('UTC')))->add(DateInterval::createFromDateString($config->customsubscriptionintervalcount .
+        return (new DateTime(
+            'today 00:00:00',
+            new DateTimeZone('UTC')
+        ))->add(DateInterval::createFromDateString($config->customsubscriptionintervalcount .
             ' ' . $config->customsubscriptioninterval . 's'));
     }
 }

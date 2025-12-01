@@ -26,10 +26,6 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once(__DIR__ . '/../.extlib/stripe-php/init.php');
 
-use core_payment\account;
-use Stripe\Stripe;
-use Stripe\StripeClient;
-
 /**
  * Upgrade the plugin.
  *
@@ -143,20 +139,23 @@ function xmldb_paygw_stripe_upgrade($oldversion) {
                 'message_provider_paygw_stripe_payment_successful_loggedin',
                 'message_provider_paygw_stripe_payment_successful_loggedoff',
                 'message_provider_paygw_stripe_payment_failed_loggedin',
-                'message_provider_paygw_stripe_payment_failed_loggedoff'
+                'message_provider_paygw_stripe_payment_failed_loggedoff',
             ];
 
             foreach ($names as $name) {
                 $record = [
                     'plugin' => 'message',
                     'name' => $name,
-                    'value' => 'email,popup'
+                    'value' => 'email,popup',
                 ];
-                if (!$DB->record_exists_select('config_plugins',
-                    'plugin = :plugin AND name = :name AND ' . $DB->sql_compare_text('value') . ' = ' .
-                    $DB->sql_compare_text(':value'),
-                    $record
-                )) {
+                if (
+                    !$DB->record_exists_select(
+                        'config_plugins',
+                        'plugin = :plugin AND name = :name AND ' . $DB->sql_compare_text('value') . ' = ' .
+                        $DB->sql_compare_text(':value'),
+                        $record
+                    )
+                ) {
                     $DB->insert_record('config_plugins', $record);
                 }
             }
@@ -230,6 +229,35 @@ function xmldb_paygw_stripe_upgrade($oldversion) {
         // API version upgrade, delete webhooks, so they can be recreated later with the correct version.
         paygw_stripe_delete_webhooks();
         upgrade_plugin_savepoint(true, 2023100500, 'paygw', 'stripe');
+    }
+
+    if ($oldversion < 2025072800) {
+        // Rename table to better reflect usage, add session ID and make payment_intent nullable.
+        $table = new xmldb_table('paygw_stripe_intents');
+
+        $dbman->add_field(
+            $table,
+            new xmldb_field('checkoutsessionid', XMLDB_TYPE_CHAR, '100', null, null, null, null)
+        );
+        $dbman->add_index($table, new xmldb_index('checkoutsessionid', XMLDB_INDEX_UNIQUE, ['checkoutsessionid']));
+
+        $intentindex = new xmldb_index('paymentintent', XMLDB_INDEX_UNIQUE, ['paymentintent']);
+        if ($dbman->index_exists($table, $intentindex)) {
+            $dbman->drop_index($table, $intentindex);
+        }
+
+        $intentfield = new xmldb_field('paymentintent', XMLDB_TYPE_CHAR, '100', null, null, null, null);
+        $dbman->change_field_notnull($table, $intentfield);
+
+        $dbman->rename_table($table, 'paygw_stripe_checkout_sessions');
+
+        upgrade_plugin_savepoint(true, 2025072800, 'paygw', 'stripe');
+    }
+
+    if ($oldversion < 2025080300) {
+        // API version upgrade in last update, but I forgot to recreate webhooks.
+        paygw_stripe_recreate_webhooks();
+        upgrade_plugin_savepoint(true, 2025080300, 'paygw', 'stripe');
     }
 
     return true;

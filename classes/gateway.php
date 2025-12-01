@@ -25,6 +25,7 @@
 namespace paygw_stripe;
 
 use core_payment\form\account_gateway;
+use Exception;
 
 /**
  * The gateway class for Stripe payment gateway.
@@ -51,7 +52,7 @@ class gateway extends \core_payment\gateway {
             'LRD', 'LSL', 'MAD', 'MDL', 'MGA', 'MKD', 'MMK', 'MNT', 'MOP', 'MUR', 'MVR', 'MWK', 'MXN', 'MYR', 'MZN', 'NAD', 'NGN',
             'NIO', 'NOK', 'NPR', 'NZD', 'PAB', 'PEN', 'PGK', 'PHP', 'PKR', 'PLN', 'PYG', 'QAR', 'RON', 'RSD', 'RUB', 'RWF', 'SAR',
             'SBD', 'SCR', 'SEK', 'SGD', 'SHP', 'SOS', 'SRD', 'STD', 'SZL', 'THB', 'TJS', 'TOP', 'TRY', 'TTD', 'TWD', 'TZS', 'UAH',
-            'UGX', 'UYU', 'UZS', 'VND', 'VUV', 'WST', 'XAF', 'XCD', 'XOF', 'XPF', 'YER', 'ZAR', 'ZMW'
+            'UGX', 'UYU', 'UZS', 'VND', 'VUV', 'WST', 'XAF', 'XCD', 'XOF', 'XPF', 'YER', 'ZAR', 'ZMW',
         ];
     }
 
@@ -95,11 +96,11 @@ class gateway extends \core_payment\gateway {
             'ideal' => get_string('paymentmethod:ideal', 'paygw_stripe'),
             'p24' => get_string('paymentmethod:p24', 'paygw_stripe'),
             'sepa_debit' => get_string('paymentmethod:sepa_debit', 'paygw_stripe'),
-            'sofort' => get_string('paymentmethod:sofort', 'paygw_stripe'),
             'upi' => get_string('paymentmethod:upi', 'paygw_stripe'),
-            'netbanking' => get_string('paymentmethod:netbanking', 'paygw_stripe'),
             'wechat_pay' => get_string('paymentmethod:wechat_pay', 'paygw_stripe'),
-            'klarna' => get_string('paymentmethod:klarna', 'paygw_stripe')
+            'klarna' => get_string('paymentmethod:klarna', 'paygw_stripe'),
+            'nz_bank_account' => get_string('paymentmethod:nz_bank_account', 'paygw_stripe'),
+            'twint' => get_string('paymentmethod:twint', 'paygw_stripe'),
         ];
         $method = $mform->addElement('select', 'paymentmethods', get_string('paymentmethods', 'paygw_stripe'), $paymentmethods);
         $mform->setType('paymentmethods', PARAM_TEXT);
@@ -109,8 +110,12 @@ class gateway extends \core_payment\gateway {
         $mform->addElement('advcheckbox', 'allowpromotioncodes', get_string('allowpromotioncodes', 'paygw_stripe'));
         $mform->setDefault('allowpromotioncodes', true);
 
-        $mform->addElement('advcheckbox', 'enableautomatictax', get_string('enableautomatictax', 'paygw_stripe'),
-            get_string('enableautomatictax_desc', 'paygw_stripe'));
+        $mform->addElement(
+            'advcheckbox',
+            'enableautomatictax',
+            get_string('enableautomatictax', 'paygw_stripe'),
+            get_string('enableautomatictax_desc', 'paygw_stripe')
+        );
 
         $mform->addElement('select', 'defaulttaxbehavior', get_string('defaulttaxbehavior', 'paygw_stripe'), [
             'exclusive' => get_string('taxbehavior:exclusive', 'paygw_stripe'),
@@ -118,12 +123,29 @@ class gateway extends \core_payment\gateway {
         ]);
         $mform->addHelpButton('defaulttaxbehavior', 'defaulttaxbehavior', 'paygw_stripe');
 
+        $mform->addElement(
+            'advcheckbox',
+            'collectbillingaddress',
+            get_string('collectbillingaddress', 'paygw_stripe'),
+            get_string('collectbillingaddress_desc', 'paygw_stripe')
+        );
+        $mform->setDefault('collectbillingaddress', false);
+
         $mform->addElement('select', 'type', get_string('paymenttype', 'paygw_stripe'), [
             'onetime' => get_string('paymenttype:onetime', 'paygw_stripe'),
             'subscription' => get_string('paymenttype:subscription', 'paygw_stripe'),
         ]);
         $mform->setType('type', PARAM_TEXT);
         $mform->setDefault('type', 'onetime');
+
+        $mform->addElement(
+            'advcheckbox',
+            'invoicecreation',
+            get_string('invoicecreation', 'paygw_stripe'),
+            get_string('invoicecreation_desc', 'paygw_stripe')
+        );
+        $mform->setDefault('invoicecreation', false);
+        $mform->hideIf('invoicecreation', 'type', 'neq', 'onetime');
 
         $mform->addElement('select', 'subscriptioninterval', get_string('subscriptioninterval', 'paygw_stripe'), [
             'daily' => get_string('subscriptionperiod:daily', 'paygw_stripe'),
@@ -147,8 +169,11 @@ class gateway extends \core_payment\gateway {
         $mform->setType('customsubscriptioninterval', PARAM_TEXT);
         $mform->setDefault('customsubscriptioninterval', 'month');
 
-        $mform->addElement('text', 'customsubscriptionintervalcount',
-            get_string('customsubscriptionintervalcount', 'paygw_stripe'));
+        $mform->addElement(
+            'text',
+            'customsubscriptionintervalcount',
+            get_string('customsubscriptionintervalcount', 'paygw_stripe')
+        );
         $mform->setType('customsubscriptionintervalcount', PARAM_INT);
         $mform->setDefault('customsubscriptionintervalcount', 1);
         $mform->addHelpButton('customsubscriptionintervalcount', 'customsubscriptionintervalcount', 'paygw_stripe');
@@ -157,12 +182,20 @@ class gateway extends \core_payment\gateway {
         $mform->hideIf('customsubscriptioninterval', 'subscriptioninterval', 'neq', 'custom');
         $mform->hideIf('customsubscriptionintervalcount', 'subscriptioninterval', 'neq', 'custom');
 
-        $mform->addElement('advcheckbox', 'anchorbilling', get_string('anchoredbilling', 'paygw_stripe'),
-            get_string('anchoredbilling_help', 'paygw_stripe'));
+        $mform->addElement(
+            'advcheckbox',
+            'anchorbilling',
+            get_string('anchoredbilling', 'paygw_stripe'),
+            get_string('anchoredbilling_help', 'paygw_stripe')
+        );
         $mform->hideIf('anchorbilling', 'type', 'neq', 'subscription');
 
-        $mform->addElement('advcheckbox', 'firstintervalfree', get_string('trialperiod', 'paygw_stripe'),
-            get_string('trialperiod_help', 'paygw_stripe'));
+        $mform->addElement(
+            'advcheckbox',
+            'firstintervalfree',
+            get_string('trialperiod', 'paygw_stripe'),
+            get_string('trialperiod_help', 'paygw_stripe')
+        );
         $mform->hideIf('firstintervalfree', 'type', 'neq', 'subscription');
     }
 
@@ -174,10 +207,38 @@ class gateway extends \core_payment\gateway {
      * @param array $files
      * @param array $errors form errors (passed by reference)
      */
-    public static function validate_gateway_form(account_gateway $form,
-        \stdClass $data, array $files, array &$errors): void {
+    public static function validate_gateway_form(
+        account_gateway $form,
+        \stdClass $data,
+        array $files,
+        array &$errors
+    ): void {
+        global $DB;
         if ($data->enabled && (empty($data->apikey) || empty($data->secretkey) || empty($data->paymentmethods))) {
             $errors['enabled'] = get_string('gatewaycannotbeenabled', 'payment');
+        }
+
+        // Very hacky as this shouldn't live in a validation function, but due to Moodle limitations it's placed here.
+        // Check if API keys have changed, remove existing webhook and create new.
+        $existingdata = $form->get_gateway_persistent()->get_configuration();
+        if (
+            isset($existingdata['apikey']) && isset($existingdata['secretkey']) &&
+            ($data->apikey != $existingdata['apikey'] || $data->secretkey != $existingdata['secretkey'])
+        ) {
+            $paymentaccountid = $form->get_gateway_persistent()->get_account()->get('id');
+
+            $DB->delete_records('paygw_stripe_webhooks', ['paymentaccountid' => $paymentaccountid]);
+            try {
+                if (is_string($existingdata['apikey']) && is_string($existingdata['secretkey'])) {
+                    $oldhelper = new stripe_helper($existingdata['apikey'], $existingdata['secretkey']);
+                    $oldhelper->delete_webhook($paymentaccountid);
+                }
+
+                $newhelper = new stripe_helper($data->apikey, $data->secretkey);
+                $newhelper->create_webhook($paymentaccountid);
+            } catch (Exception $ignored) {
+                $errors['apikey'] = get_string('apiwebhookerror', 'paygw_stripe');
+            }
         }
     }
 }
