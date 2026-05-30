@@ -127,7 +127,7 @@ class stripe_helper {
     public function create_product(string $description, string $component, string $paymentarea, string $itemid): Product {
         global $DB;
         $product = $this->stripe->products->create([
-            'name' => $description
+            'name' => substr($description, 0, 250)
         ]);
         $record = new \stdClass();
         $record->productid = $product->id;
