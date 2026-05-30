@@ -15,17 +15,22 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version information
+ * paygw_stripe installer script.
  *
  * @package    paygw_stripe
- * @copyright  2021 Alex Morris <alex@navra.nz>
+ * @copyright  2026 Jayce Birrell <jayce.birrell@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
+/**
+ * Enable the Stripe payment gateway plugin on installation.
+ *
+ * It still needs to be configured and enabled for payment accounts.
+ */
+function xmldb_paygw_stripe_install() {
+    global $CFG;
 
-$plugin->version   = 2026020800;        // The current plugin version (Date: YYYYMMDDXX).
-$plugin->release   = '1.31';
-$plugin->requires  = 2022112809;        // Requires this Moodle version. 4.1.
-$plugin->component = 'paygw_stripe';    // Full name of the plugin (used for diagnostics).
-$plugin->maturity  = MATURITY_STABLE;
+    // Enable the Stripe payment gateway on installation. It still needs to be configured and enabled for accounts.
+    $order = (!empty($CFG->paygw_plugins_sortorder)) ? explode(',', $CFG->paygw_plugins_sortorder) : [];
+    set_config('paygw_plugins_sortorder', join(',', array_merge($order, ['stripe'])));
+}
