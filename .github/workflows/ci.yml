@@ -5,9 +5,6 @@ on: [ push, pull_request ]
 jobs:
   test:
     runs-on: ubuntu-22.04
-    # The unreleased Moodle 'main' dev branch is informational only — it must not
-    # gate a plugin that targets released versions.
-    continue-on-error: ${{ matrix.experimental || false }}
 
     services:
       postgres:
@@ -36,15 +33,6 @@ jobs:
         php: [ '8.1' ]
         moodle-branch: [ 'MOODLE_401_STABLE', 'MOODLE_402_STABLE', 'MOODLE_403_STABLE' ]
         database: [ pgsql, mariadb ]
-        include:
-          - php: '8.1'
-            moodle-branch: 'main'
-            database: pgsql
-            experimental: true
-          - php: '8.1'
-            moodle-branch: 'main'
-            database: mariadb
-            experimental: true
 
     steps:
       - name: Check out repository code
