@@ -94,7 +94,7 @@ class product_pricing_service {
      */
     public function create_product(string $description, string $component, string $paymentarea, string $itemid): Product {
         $product = $this->stripe->products->create([
-            'name' => $description,
+            'name' => substr($description, 0, 250),
         ]);
 
         $record = new paygw_product(
@@ -198,6 +198,7 @@ class product_pricing_service {
     ) {
         $unitamount = $this->get_unit_amount($cost, $payable->get_currency());
         $currency = strtolower($payable->get_currency());
+        $description = substr($description, 0, 250);
 
         if (!$product = $this->get_product($component, $paymentarea, $itemid)) {
             $product = $this->create_product($description, $component, $paymentarea, $itemid);
