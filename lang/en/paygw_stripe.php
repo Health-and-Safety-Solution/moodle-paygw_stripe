@@ -18,7 +18,7 @@
  * Strings for component 'paygw_stripe', language 'en'
  *
  * @package    paygw_stripe
- * @copyright  2021 Alex Morris <alex@navra.nz>
+ * @copyright  Alex Morris <alex@navra.nz>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -27,7 +27,7 @@ $string['alreadydeliveredcourse'] = 'This course is already delivered to you, if
 $string['anchoredbilling'] = 'Use the start of the subscription interval as a fixed billing date.';
 $string['anchoredbilling_help'] =
     'E.g. For a monthly subscription, billing will be done every 1st of the month. If a user subscribes in the middle of the month, they will be charged a prorated amount covering from the registration day to the end of the month';
-$string['apikey'] = 'API Key';
+$string['apikey'] = 'Publishable Key';
 $string['apikey_help'] = 'The API key that we use to identifier ourselves with Stripe';
 $string['apiwebhookerror'] = 'There was an error while creating a webhook using the given API keys.';
 $string['cancel'] = 'Cancel';
@@ -50,8 +50,11 @@ $string['enableautomatictax'] = 'Enable automatic tax';
 $string['enableautomatictax_desc'] = 'Automatic tax must be enabled and configured in the Stripe dashboard.';
 $string['failedtosetdefaultpaymentmethod'] = 'Failed to set up a payment method for subscription, please try again.';
 $string['fee'] = 'Fee';
+$string['forcedlocale'] = 'Force locale';
+$string['forcedlocale_desc'] = 'Force locale for checkout, invoices, any Stripe related pages. If empty we will attempt to use the users locale pulled from the Moodle language settings.';
 $string['gatewaydescription'] = 'Stripe is an authorised payment gateway provider for processing credit card transactions.';
 $string['gatewayname'] = 'Stripe';
+$string['invalidsessionbinding'] = 'This payment session does not match the requested item.';
 $string['invoicecreation'] = 'Automatic Invoices';
 $string['invoicecreation_desc'] = 'Generate post-purchase invoice for one-time payments';
 
@@ -65,6 +68,8 @@ $string['payment:successful:subject'] = 'Payment successful';
 
 $string['paymentcancelled'] = 'Payment was cancelled';
 
+$string['paymenterror'] = 'There was an error processing your payment, please contact the site administrator for help';
+
 $string['paymentmethod:alipay'] = 'Alipay';
 $string['paymentmethod:bancontact'] = 'Bancontact';
 $string['paymentmethod:card'] = 'Card';
@@ -74,10 +79,15 @@ $string['paymentmethod:ideal'] = 'iDEAL';
 $string['paymentmethod:klarna'] = 'Klarna';
 $string['paymentmethod:nz_bank_account'] = 'NZ BECS Direct Debit';
 $string['paymentmethod:p24'] = 'P24';
+$string['paymentmethod:paypal'] = 'PayPal';
 $string['paymentmethod:sepa_debit'] = 'SEPA Direct Debit';
 $string['paymentmethod:twint'] = 'TWINT';
 $string['paymentmethod:wechat_pay'] = 'WeChat Pay';
 
+$string['paymentmethodconfiguration'] = 'Payment Method Configuration';
+$string['paymentmethodconfiguration_help'] = 'Select a Stripe Payment Method configuration to use for this gateway. Update your payment methods in the Stripe dashboard.';
+$string['paymentmethodconfigurationlink'] = 'Manage your payment methods on the <a href="https://dashboard.stripe.com/settings/payment_methods">Stripe dashboard settings page</a>.';
+$string['paymentmethodconfigurationsavekeysfirst'] = 'Save your Stripe API keys first, then select a payment method configuration.';
 $string['paymentmethods'] = 'Payment Methods';
 $string['paymentpending'] = 'Payment is pending, you will be enrolled when the payment has cleared.';
 $string['paymentsuccessful'] = 'Payment was successful';
@@ -106,6 +116,7 @@ $string['stripeaccount'] = 'Stripe account ID';
 $string['stripeaccount_help'] = 'For creating the direct charge branding page';
 $string['subscriptionerror'] = 'There was an error creating the subscription, please contact the site administrator for help';
 $string['subscriptioninterval'] = 'Subscription Period';
+$string['subscriptioninvalid'] = 'Invalid subscription, please contact the site administrator for help';
 
 $string['subscriptionperiod:custom'] = 'Custom';
 $string['subscriptionperiod:daily'] = 'Daily';

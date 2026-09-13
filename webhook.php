@@ -18,13 +18,14 @@
  * Webhook for receiving events from Stripe.
  *
  * @package    paygw_stripe
- * @copyright  2023 Alex Morris <alex@navra.nz>
+ * @copyright  Alex Morris <alex@navra.nz>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 define('NO_MOODLE_COOKIES', true);
 
 use core_payment\helper;
+use paygw_stripe\local\service\stripe_service_factory;
 use paygw_stripe\stripe_helper;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\Webhook;
@@ -56,14 +57,23 @@ if (
 $metadata = $jsonpayload['data']['object']['metadata'];
 $config =
     (object) helper::get_gateway_configuration($metadata['component'], $metadata['paymentarea'], $metadata['itemid'], 'stripe');
+
+$factory = new stripe_service_factory($config->apikey, $config->secretkey);
+
 $stripehelper = new stripe_helper($config->apikey, $config->secretkey);
 
-// Validate payload using secret retrieved from webhook table.
+if (!isset($_SERVER['HTTP_STRIPE_SIGNATURE'])) {
+    http_response_code(400);
+    exit();
+}
+
 $sigheader = $_SERVER['HTTP_STRIPE_SIGNATURE'];
 $event = null;
 
+// Validate payload using secret retrieved from webhook table.
 $payable = helper::get_payable($metadata['component'], $metadata['paymentarea'], $metadata['itemid']);
-$webhook = $stripehelper->get_webhook($payable->get_account_id());
+$webhookservice = $factory->webhook_service();
+$webhook = $webhookservice->get_webhook($payable->get_account_id());
 if ($webhook == null) {
     http_response_code(500);
     exit();
@@ -87,8 +97,10 @@ try {
     http_response_code(400);
     exit();
 } catch (SignatureVerificationException $e) {
-    // Invalid signature.
-    http_response_code(400);
+    // Signature mismatch means this event was signed by another webhook's secret.
+    // This happens routinely when multiple payment accounts exist, because Stripe
+    // broadcasts each event to all subscribed webhooks.
+    http_response_code(202);
     exit();
 }
 

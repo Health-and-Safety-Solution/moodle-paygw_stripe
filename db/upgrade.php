@@ -18,7 +18,7 @@
  * Upgrade script for paygw_stripe.
  *
  * @package    paygw_stripe
- * @copyright  2021 Alex Morris <alex@navra.nz>
+ * @copyright  Alex Morris <alex@navra.nz>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -258,6 +258,34 @@ function xmldb_paygw_stripe_upgrade($oldversion) {
         // API version upgrade in last update, but I forgot to recreate webhooks.
         paygw_stripe_recreate_webhooks();
         upgrade_plugin_savepoint(true, 2025080300, 'paygw', 'stripe');
+    }
+
+    if ($oldversion < 2026081500) {
+        // API version upgrade.
+        paygw_stripe_recreate_webhooks();
+        upgrade_plugin_savepoint(true, 2026081500, 'paygw', 'stripe');
+    }
+
+    if ($oldversion < 2026081501) {
+        paygw_stripe_move_payment_methods();
+        upgrade_plugin_savepoint(true, 2026081501, 'paygw', 'stripe');
+    }
+
+    if ($oldversion < 2026081801) {
+        // Define field delivered to be added to paygw_stripe_checkout_sessions.
+        $table = new xmldb_table('paygw_stripe_checkout_sessions');
+        $field = new xmldb_field('delivered', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '0', 'productid');
+
+        // Conditionally launch add field delivered.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Backfill all existing rows as delivered.
+        $DB->set_field('paygw_stripe_checkout_sessions', 'delivered', 1);
+
+        // Stripe savepoint reached.
+        upgrade_plugin_savepoint(true, 2026081801, 'paygw', 'stripe');
     }
 
     return true;

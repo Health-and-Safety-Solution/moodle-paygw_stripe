@@ -18,11 +18,12 @@
  * Process payment, deliver the order to the user.
  *
  * @package    paygw_stripe
- * @copyright  2021 Alex Morris <alex@navra.nz>
+ * @copyright  Alex Morris <alex@navra.nz>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 use core_payment\helper;
+use paygw_stripe\local\service\stripe_service_factory;
 use paygw_stripe\stripe_helper;
 
 require_once(__DIR__ . '/../../../config.php');
@@ -38,15 +39,31 @@ $sessionid = required_param('session_id', PARAM_TEXT);
 
 $config = (object) helper::get_gateway_configuration($component, $paymentarea, $itemid, 'stripe');
 
+$factory = new stripe_service_factory($config->apikey, $config->secretkey);
+$checkoutservice = $factory->checkout_service();
 $stripehelper = new stripe_helper($config->apikey, $config->secretkey);
 
-$sessionmode = $stripehelper->get_sessionmode($sessionid);
+$sessionmode = $checkoutservice->get_sessionmode($sessionid);
 
 if ($sessionmode === 'subscription') {
-    $subscriptionstatus = $stripehelper->get_subscription_status($sessionid);
+    $subscriptionservice = $factory->subscription_service();
+
+    if (
+        !$subscriptionservice->is_session_bound_to_request(
+            $sessionid,
+            (int)$USER->id,
+            $component,
+            $paymentarea,
+            $itemid
+        )
+    ) {
+        redirect(new moodle_url('/'), get_string('invalidsessionbinding', 'paygw_stripe'));
+    }
+
+    $subscriptionstatus = $subscriptionservice->get_subscription_status($sessionid);
     if (!in_array($subscriptionstatus, ['incomplete', 'incomplete_expired', 'canceled'])) {
-        $stripehelper->save_payment_status($sessionid);
-        $stripehelper->deliver_course($component, $paymentarea, $itemid, $USER->id);
+        $checkoutservice->save_payment_status($sessionid);
+        $stripehelper->deliver_course($component, $paymentarea, $itemid, (int)$USER->id);
 
         // Find redirection.
         $url = helper::get_success_url($component, $paymentarea, $itemid);
@@ -55,19 +72,35 @@ if ($sessionmode === 'subscription') {
         redirect(new moodle_url('/'), get_string('subscriptionerror', 'paygw_stripe'));
     }
 } else if ($sessionmode === 'payment') {
-    if ($stripehelper->is_paid($sessionid)) {
-        if ($stripehelper->is_checkout_session_saved($sessionid)) {
+    if (
+        !$checkoutservice->is_session_bound_to_request(
+            $sessionid,
+            (int)$USER->id,
+            $component,
+            $paymentarea,
+            $itemid
+        )
+    ) {
+        redirect(new moodle_url('/'), get_string('invalidsessionbinding', 'paygw_stripe'));
+    }
+
+    if ($checkoutservice->is_paid($sessionid)) {
+        if ($checkoutservice->is_delivered($sessionid)) {
             // User is attempting to replay course delivery, redirect away.
             redirect(new moodle_url('/'), get_string('alreadydeliveredcourse', 'paygw_stripe'));
         }
 
-        $stripehelper->save_payment_status($sessionid);
-        $stripehelper->deliver_course($component, $paymentarea, $itemid, $USER->id);
+        $checkoutservice->save_payment_status($sessionid);
+        $stripehelper->deliver_course($component, $paymentarea, $itemid, (int)$USER->id);
+        $checkoutservice->mark_delivered($sessionid);
 
         // Find redirection.
         $url = helper::get_success_url($component, $paymentarea, $itemid); $SESSION->basketid = NULL;
         redirect($url, get_string('paymentsuccessful', 'paygw_stripe'), 0, 'success');
-    } else if ($stripehelper->is_pending($sessionid)) {
+    } else if ($checkoutservice->is_pending($sessionid)) {
+        $checkoutservice->save_payment_status($sessionid);
         redirect(new moodle_url('/'), get_string('paymentpending', 'paygw_stripe'));
+    } else {
+        redirect(new moodle_url('/'), get_string('paymenterror', 'paygw_stripe'));
     }
 }
