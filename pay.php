@@ -18,11 +18,12 @@
  * Redirects to the stripe checkout for payment
  *
  * @package    paygw_stripe
- * @copyright  2021 Alex Morris <alex@navra.nz>
+ * @copyright  Alex Morris <alex@navra.nz>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 use core_payment\helper;
+use paygw_stripe\local\service\stripe_service_factory;
 use paygw_stripe\stripe_helper;
 
 require_once(__DIR__ . '/../../../config.php');
@@ -33,7 +34,7 @@ require_login();
 $component = required_param('component', PARAM_ALPHANUMEXT);
 $paymentarea = required_param('paymentarea', PARAM_ALPHANUMEXT);
 $itemid = required_param('itemid', PARAM_INT);
-$description = urldecode(required_param('description', PARAM_TEXT));
+$description = required_param('description', PARAM_TEXT);
 $sessionid = optional_param('session_id', null, PARAM_TEXT);
 
 $config = (object) helper::get_gateway_configuration($component, $paymentarea, $itemid, 'stripe');
@@ -52,30 +53,47 @@ if($cost == 0) {
     $SESSION->basketid = NULL;
     redirect($CFG->wwwroot . '/blocks/iomad_commerce/edit_order_form.php?id='.$itemid, 'Order Confirmed.');
 }
+$factory = new stripe_service_factory($config->apikey, $config->secretkey);
 
-$stripehelper = new stripe_helper($config->apikey, $config->secretkey);
 if (!isset($config->type) || $config->type == 'onetime') {
-    $sessionid = $stripehelper->generate_payment($config, $payable, $description, $cost, $component,
-        $paymentarea, $itemid);
+    $checkoutservice = $factory->checkout_service();
+    $sessionid = $checkoutservice->generate_payment(
+        $config,
+        $payable,
+        $description,
+        $cost,
+        $component,
+        $paymentarea,
+        $itemid
+    );
 } else {
-    $sessionid = $stripehelper->generate_subscription($config, $payable, $description, $cost, $component,
-        $paymentarea, $itemid, $sessionid);
+    $subscriptionservice = $factory->subscription_service();
+    $sessionid = $subscriptionservice->generate_subscription(
+        $config,
+        $payable,
+        $description,
+        $cost,
+        $component,
+        $paymentarea,
+        $itemid
+    );
     if ($sessionid == null) {
         redirect(new moodle_url('/'), get_string('subscriptionerror', 'paygw_stripe'));
     }
 }
 
+// phpcs:disable
 ?>
 <!DOCTYPE html>
 <html>
-<head>
-    <title>Stripe Checkout Redirect</title>
-    <script src="https://js.stripe.com/v3/"></script>
-    <script>
-        const stripe = Stripe("<?php echo $config->apikey ?>");
-        stripe.redirectToCheckout({sessionId: "<?php echo $sessionid; ?>"});
-    </script>
-</head>
-<body>
-</body>
+    <head>
+        <title>Stripe Checkout Redirect</title>
+        <script src="https://js.stripe.com/v3/"></script>
+        <script>
+            const stripe = Stripe("<?php echo $config->apikey ?>");
+            stripe.redirectToCheckout({sessionId: "<?php echo $sessionid; ?>"});
+        </script>
+    </head>
+    <body>
+    </body>
 </html>
