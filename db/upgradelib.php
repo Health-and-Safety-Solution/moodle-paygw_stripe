@@ -18,7 +18,7 @@
  * Upgrade functions for paygw_stripe.
  *
  * @package    paygw_stripe
- * @copyright  2021 Alex Morris <alex@navra.nz>
+ * @copyright  Alex Morris <alex@navra.nz>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -27,6 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 require_once(__DIR__ . '/../.extlib/stripe-php/init.php');
 
 use core_payment\account;
+use paygw_stripe\local\service\stripe_service_factory;
 use paygw_stripe\stripe_helper;
 use Stripe\Stripe;
 use Stripe\StripeClient;
@@ -97,6 +98,78 @@ function paygw_stripe_delete_webhooks() {
                     $stripe->webhookEndpoints->delete($webhookrecord->webhookid);
                     $DB->delete_records('paygw_stripe_webhooks', ['id' => $webhookrecord->id]);
                 }
+            } catch (Exception $ignored) {
+                // Ignore errors, the api keys we are given may be wrong.
+                continue;
+            }
+        }
+    }
+}
+
+/**
+ * Recreate webhooks for API upgrades.
+ *
+ * @return void
+ * @throws coding_exception
+ * @throws dml_exception
+ */
+function paygw_stripe_recreate_webhooks() {
+    global $DB;
+
+    $gateways = $DB->get_records('payment_gateways', ['gateway' => 'stripe']);
+    foreach ($gateways as $gatewayrecord) {
+        $account = new account($gatewayrecord->accountid);
+        $gateway = $account->get_gateways(false)['stripe'] ?? null;
+        if ($gateway != null) {
+            $config = $gateway->get_configuration();
+            if (!is_string($config['apikey']) || !is_string($config['secretkey'])) {
+                continue;
+            }
+            try {
+                $factory = new stripe_service_factory($config['apikey'], $config['secretkey']);
+                $webhookservice = $factory->webhook_service();
+                $webhookservice->delete_webhook($account->get('id'));
+                $webhookservice->create_webhook($account->get('id'));
+            } catch (Exception $ignored) {
+                // Ignore errors, the api keys we are given may be wrong.
+                continue;
+            }
+        }
+    }
+}
+
+/**
+ * Move payment methods from plugin setting to Stripe Payment Methods configuration.
+ *
+ * @return void
+ */
+function paygw_stripe_move_payment_methods() {
+    global $DB;
+
+    $gateways = $DB->get_records('payment_gateways', ['gateway' => 'stripe']);
+    foreach ($gateways as $gatewayrecord) {
+        $account = new account($gatewayrecord->accountid);
+        $gateway = $account->get_gateways(false)['stripe'] ?? null;
+        if ($gateway != null) {
+            $config = $gateway->get_configuration();
+            if (!is_string($config['apikey']) || !is_string($config['secretkey'])) {
+                continue;
+            }
+            try {
+                $factory = new stripe_service_factory($config['apikey'], $config['secretkey']);
+                $paymentmethodservice = $factory->payment_method_config_service();
+                // Fetch payment methods for payment account.
+                $paymentmethods = $config['paymentmethods'] ?? [];
+                if (empty($paymentmethods)) {
+                    continue;
+                }
+                // Create stripe payment method configuration.
+                $configid = $paymentmethodservice->create_payment_method_config($account->get_formatted_name(), $paymentmethods);
+
+                // Update payment account setting to use stripe payment method configuration.
+                $config['paymentmethodconfiguration'] = $configid;
+                $gateway->set('config', json_encode($config));
+                $gateway->update();
             } catch (Exception $ignored) {
                 // Ignore errors, the api keys we are given may be wrong.
                 continue;

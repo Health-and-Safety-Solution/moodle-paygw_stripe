@@ -17,15 +17,15 @@
  * This module is responsible for Stripe content in the gateways modal.
  *
  * @module     paygw_stripe/gateway_modal
- * @copyright  2021 Alex Morris <alex@navra.nz>
+ * @copyright  Alex Morris <alex@navra.nz>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 import Templates from 'core/templates';
-import ModalFactory from 'core/modal_factory';
+import Modal from 'core/modal';
 
 const showModalWithPlaceholder = async() => {
-    const modal = await ModalFactory.create({
+    const modal = await Modal.create({
         body: await Templates.render('paygw_stripe/stripe_button_placeholder', {})
     });
     modal.show();
