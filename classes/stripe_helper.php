@@ -68,6 +68,20 @@ class stripe_helper {
      * @var customer_service Service for managing Stripe customers.
      */
     private customer_service $customerservice;
+    public function create_product(string $description, string $component, string $paymentarea, string $itemid): Product {
+        global $DB;
+        $product = $this->stripe->products->create([
+            'name' => substr($description, 0, 250)
+        ]);
+        $record = new \stdClass();
+        $record->productid = $product->id;
+        $record->component = $component;
+        $record->paymentarea = $paymentarea;
+        $record->itemid = $itemid;
+        $DB->insert_record('paygw_stripe_products', $record);
+        return $product;
+    }
+
     /**
      * @var locale_service Service for resolving locale and currency information.
      */
